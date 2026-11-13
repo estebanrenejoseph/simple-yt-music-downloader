@@ -1,73 +1,79 @@
-# simple-yt-music-downloader
+#!/usr/bin/env python3
+"""
+yt_music.py — Command-line interface version.
 
-A simple, robust bash script to download and sort music from YouTube Music, standard YouTube videos, or playlist links. 
+Parses command-line arguments, verifies system and package dependencies,
+and delegates execution to yt_music_core.run().
+For the graphical user interface version, refer to yt_music_gui.py.
+"""
 
-This tool automates the process of extracting high-quality audio, embedding metadata and thumbnails, and organizing your local music library.
+import argparse
+import sys
+from pathlib import Path
 
-## Features
+from deps import missing_dependencies
 
-* **High-Quality Audio:** Downloads the best available audio format by default, with support for `mp3`, `flac`, `m4a`, `opus`, and more.
-* **Smart Archiving:** Keeps track of downloaded IDs to prevent redundant downloads, even if you move the files.
-* **Automatic Sorting:** Extracts artist metadata to automatically organize tracks into artist-specific folders.
-* **Authentication Support:** Use a `cookies.txt` file to download from private playlists or premium accounts.
-* **Audit Missing Tracks:** Compares your local files against an online playlist to generate a report of missing or failed downloads.
-* **Smart Archiving (Optional):** Use the `-a` flag to keep track of downloaded video IDs in `.archive.txt`, preventing redundant downloads in future runs.
 
-## Dependencies
+def parse_args() -> argparse.Namespace:
+    """Configures and parses command-line arguments for the script."""
+    p = argparse.ArgumentParser(
+        description="Download and organize music from YouTube / YouTube Music.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Examples:
+  yt_music.py "https://youtube.com/playlist?list=..."
+  yt_music.py -f flac -d ~/Music -s "https://music.youtube.com/watch?v=..."
+  yt_music.py -c cookies.txt -e "https://youtube.com/playlist?list=..."
+  yt_music.py -a "https://youtube.com/playlist?list=..."
+  yt_music.py -s -g 2 -e -a -d ~/Music "https://youtube.com/playlist?list=..."
+""",
+    )
+    p.add_argument("link", help="Target video or playlist URL")
+    p.add_argument("-d", "--dir", type=Path, default=Path("."),
+                   help="Target destination directory (default: current directory)")
+    p.add_argument("-f", "--format", default="best",
+                   help="Audio format: best, mp3, flac, m4a, opus... (default: best)")
+    p.add_argument("-g", "--depth", type=int, default=1,
+                   help="Search depth for existing local tracks (default: 1)")
+    p.add_argument("-c", "--cookies", type=Path,
+                   help="Path to cookies.txt file for authenticated downloads")
+    p.add_argument("-a", "--archive", action="store_true",
+                   help="Enable archive mode (records downloaded video IDs in .archive.txt)")
+    p.add_argument("-e", "--export", action="store_true",
+                   help="Export a report of missing tracks (missing.txt)")
+    p.add_argument("-s", "--sort", action="store_true",
+                   help="Sort downloaded tracks into artist subdirectories")
+    return p.parse_args()
 
-Before running the script, ensure you have the following dependencies installed on your system:
 
-* **`yt-dlp`**: The core downloading engine.
-* **`ffprobe`** (part of the `ffmpeg` package): Used for extracting artist metadata from the audio files.
-* **`mutagen`** (Python package): Required by `yt-dlp` to embed audio metadata and convert thumbnails.
+def main() -> None:
+    """Main application entry point handling argument parsing, dependency validation, and execution."""
+    args = parse_args()
 
-**Installation (Debian/Ubuntu):**
-```bash
-sudo apt update
-sudo apt install yt-dlp ffmpeg python3-mutagen
+    # Verify that all mandatory dependencies are present before proceeding
+    problems = missing_dependencies()
+    if problems:
+        sys.exit("Critical Error:\n\n" + "\n\n".join(problems))
 
-## Installation
+    # Import core logic only after verification: yt_dlp and mutagen are guaranteed to be available
+    from core import Options, Reporter, run
 
-1. Clone or download the script to your local machine.
-2. Make the script executable:
-```bash
-chmod +x yt-music.sh
-```
+    opts = Options(
+        link=args.link,
+        dir=args.dir,
+        format=args.format,
+        depth=args.depth,
+        cookies=args.cookies,
+        archive=args.archive,
+        export=args.export,
+        sort=args.sort,
+    )
+    run(opts, Reporter(log=print))
 
-## Usage
 
-Usage: ./yt-music.sh [options] <link>
-
-Options:
-  -d <dir>     Target directory for downloads (default: current directory)
-  -f <format>  Audio format: best, mp3, flac, m4a, opus, etc. (default: best)
-  -g <depth>   Search depth for existing local tracks (default: 1)
-  -c <file>    Path to a cookies.txt file for authenticated downloads
-  -a           Enable archive mode (records downloaded IDs in .archive.txt)
-  -e           Export a missing tracks report (missing.txt)
-  -s           Enable sort mode (organizes tracks into artist subdirectories)
-  -h           Display this help message
-
-## Examples
-
-**Basic download to the current directory:**
-```bash
-./yt-music.sh "https://youtube.com/playlist?list=YOUR_PLAYLIST_ID"
-```
-
-**Download as FLAC, save to a specific folder, and sort by artist:**
-```bash
-./yt-music.sh -f flac -d "/home/user/Music" -s "https://music.youtube.com/watch?v=..."
-```
-
-**Download using cookies and export a missing tracks list:**
-```bash
-./yt-music.sh -c "cookies.txt" -e "https://youtube.com/playlist?list=..."
-```
-**Download a playlist with archive mode enabled to prevent re-downloading existing tracks:**
-```bash
-./yt-music.sh -a "[https://youtube.com/playlist?list=YOUR_PLAYLIST_ID](https://youtube.com/playlist?list=YOUR_PLAYLIST_ID)"
-
-## License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit("\nInterrupted.")
+    except FileNotFoundError as exc:
+        sys.exit(f"Error: {exc}")
