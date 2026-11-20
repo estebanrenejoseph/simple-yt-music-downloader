@@ -8,17 +8,23 @@ successfully even when they are absent, allowing it to display a clear, user-fri
 
 import importlib.util
 import shutil
+import sys
+
+# True inside a PyInstaller executable, where Python packages are bundled
+FROZEN = getattr(sys, "frozen", False)
 
 
 def missing_dependencies() -> list[str]:
     """Checks for required external Python packages and system binaries, returning a list of detected issues (empty list = all OK)."""
     problems: list[str] = []
 
-    if importlib.util.find_spec("yt_dlp") is None:
-        problems.append("The Python module 'yt-dlp' is missing.\nInstallation: pip install yt-dlp")
+    # Python packages are bundled in the frozen executable: only check them when running from source
+    if not FROZEN:
+        if importlib.util.find_spec("yt_dlp") is None:
+            problems.append("The Python module 'yt-dlp' is missing.\nInstallation: pip install yt-dlp")
 
-    if importlib.util.find_spec("mutagen") is None:
-        problems.append("The Python module 'mutagen' is missing.\nInstallation: pip install mutagen")
+        if importlib.util.find_spec("mutagen") is None:
+            problems.append("The Python module 'mutagen' is missing.\nInstallation: pip install mutagen")
 
     if shutil.which("ffmpeg") is None:
         problems.append(
